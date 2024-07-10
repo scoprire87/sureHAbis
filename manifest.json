@@ -1,9 +1,9 @@
 {
-    "domain": "sureha",
-    "name": "SureHA (fork)",
+    "name": "SureHA",
     "version": "0.2.1",
-    "documentation": "https://github.com/ChristophCaina/sureha",
-    "issue_tracker": "https://github.com/ChristophCaina/sureha/issues",
+    "documentation": "https://github.com/benleb/sureha",
+    "issue_tracker": "https://github.com/benleb/sureha/issues",
+    "domain": "sureha",
     "config_flow": true,
     "codeowners": ["@ChristophCaina"],
     "requirements": ["surepy>=0.9.0"],
