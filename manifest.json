@@ -5,7 +5,7 @@
     "issue_tracker": "https://github.com/benleb/sureha/issues",
     "domain": "sureha",
     "config_flow": true,
-    "codeowners": ["@ChristophCaina"],
+    "codeowners": ["@benleb"],
     "requirements": ["surepy>=0.9.0"],
     "iot_class": "cloud_polling"
 }
