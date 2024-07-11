@@ -1,3 +1,7 @@
+**Information:**  
+This is a fork of the original Integration provided by [benleb/sureha](https://github.com/benleb/sureha)  
+If you are interested in this integration, please use the original one.
+
 # SureHA 🐾
 
 > documentation is currently in a bad state. I am aware of this and working on it!
