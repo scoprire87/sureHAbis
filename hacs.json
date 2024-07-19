@@ -1,6 +1,6 @@
 {
     "name": "SureHA",
-    "documentation": "https://github.com/ChristophCaina/sureha",
+    "documentation": "https://github.com/benleb/sureha",
     "content_in_root": false,
     "render_readme": true,
     "domains": [
