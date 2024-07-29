@@ -8,7 +8,7 @@ from typing import Any
 
 import async_timeout
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_PASSWORD, CONF_TOKEN, CONF_USERNAME
+from homeassistant.const import CONF_PASSWORD, CONF_TOKEN, CONF_USERNAME, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers import config_validation as cv
@@ -39,7 +39,7 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS = ["binary_sensor", "device_tracker", "sensor"]
+PLATFORMS = [Platform.BINARY_SENSOR, Platform.DEVICE_TRACKER, Platform.SENSOR]
 SCAN_INTERVAL = timedelta(minutes=3)
 
 CONFIG_SCHEMA = vol.Schema(
@@ -179,23 +179,7 @@ class SurePetcareAPI:
         _LOGGER.info(" \x1b[38;2;255;26;102m·\x1b[0m" * 30)
         _LOGGER.info("")
 
-        self.hass.async_add_job(
-            self.hass.config_entries.async_forward_entry_setup(  # type: ignore
-                self.config_entry, "binary_sensor"
-            )
-        )
-
-        self.hass.async_add_job(
-            self.hass.config_entries.async_forward_entry_setup(  # type: ignore
-                self.config_entry, "sensor"
-            )
-        )
-
-        self.hass.async_add_job(
-            self.hass.config_entries.async_forward_entry_setup(  # type: ignore
-                self.config_entry, "device_tracker"
-            )
-        )
+        await self.hass.config_entries.async_forward_entry_setups(self.config_entry, PLATFORMS)
 
         surepy_entities: list[SurepyEntity] = self.coordinator.data.values()
 
