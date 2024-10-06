@@ -1,6 +1,10 @@
 """Support for Sure PetCare Flaps/Pets sensors."""
+
 from __future__ import annotations
 
+import logging
+import pprint
+import random
 from typing import Any, cast
 
 from homeassistant.components.sensor import (
@@ -38,6 +42,8 @@ from .const import (
     SURE_MANUFACTURER,
 )
 
+_LOGGER = logging.getLogger(__name__)
+
 PARALLEL_UPDATES = 2
 
 
@@ -65,7 +71,7 @@ async def async_setup_entry(
         if surepy_entity.type in [
             EntityType.CAT_FLAP,
             EntityType.PET_FLAP,
-        ]:
+        ] and surepy_entity.raw_data().get("status", {}).get("locking"):
             entities.append(Flap(spc.coordinator, surepy_entity.id, spc))
 
         elif surepy_entity.type == EntityType.FELAQUA:
@@ -73,9 +79,25 @@ async def async_setup_entry(
 
         elif surepy_entity.type == EntityType.FEEDER:
 
-            for bowl in surepy_entity.bowls.values():
+            bowls = {}
+
+            if len(surepy_entity.bowls) > 0:
+                bowls = surepy_entity.bowls.values()
+            else:
+                if surepy_entity.raw_data()["control"].get("bowls"):
+                    bowls = surepy_entity.raw_data()["control"]["bowls"]
+
+            _LOGGER.debug(
+                "%s| bowls (%d): %s",
+                surepy_entity.raw_data()["name"],
+                len(bowls),
+                pprint.pformat(bowls),
+            )
+
+            for bowl in bowls.get("settings", []):
                 entities.append(
-                    FeederBowl(spc.coordinator, surepy_entity.id, spc, bowl.raw_data())
+                    FeederBowl(spc.coordinator, surepy_entity.id, spc, bowl)
+                    # FeederBowl(spc.coordinator, surepy_entity.id, spc, bowl.raw_data())
                 )
 
             entities.append(Feeder(spc.coordinator, surepy_entity.id, spc))
@@ -85,7 +107,7 @@ async def async_setup_entry(
             EntityType.PET_FLAP,
             EntityType.FEEDER,
             EntityType.FELAQUA,
-        ]:
+        ] and surepy_entity.raw_data().get("status", {}).get("battery", {}):
 
             voltage_batteries_full = cast(
                 float,
@@ -241,16 +263,21 @@ class FeederBowl(SurePetcareSensor):
         """Initialize a Bowl sensor."""
         super().__init__(coordinator, _id, spc)
 
+        _LOGGER.debug("bowl_data: %s", pprint.pformat(bowl_data))
+
         self.feeder_id = _id
-        self.bowl_id = int(bowl_data["index"])
+
+        # todo: index parameter is not available in the bowl_data anymore
+        # for now we use a random number...
+        self.bowl_id = random.randint(
+            1, 10
+        )  # int(bowl_data.get("index", random.randint(1, 10)))
 
         self._id = int(f"{_id}{str(self.bowl_id)}")
         self._spc: SurePetcareAPI = spc
 
         self._surepy_feeder_entity: SurepyEntity = self._coordinator.data[_id]
-        self._surepy_entity: SureFeederBowl = self._coordinator.data[_id].bowls[
-            self.bowl_id
-        ]
+
         self._state: dict[str, Any] = bowl_data
 
         # https://github.com/PyCQA/pylint/issues/2062
@@ -261,7 +288,10 @@ class FeederBowl(SurePetcareSensor):
         )
 
         self._attr_icon = "mdi:bowl"
-        self._attr_state = int(self._surepy_entity.weight)
+
+        if hasattr(self._surepy_entity, "weight"):
+            self._attr_state = int(self._surepy_entity.weight)
+
         self._attr_unique_id = (
             f"{self._surepy_feeder_entity.household_id}-{self.feeder_id}-{self.bowl_id}"
         )
@@ -271,8 +301,17 @@ class FeederBowl(SurePetcareSensor):
     def state(self) -> float | None:
         """Return the remaining water."""
 
-        if (feeder := cast(SureFeeder, self._coordinator.data[self.feeder_id])) and (
-            weight := feeder.bowls[self.bowl_id].weight
+        _LOGGER.debug(
+            "self._coordinator.data[%d]: %s",
+            self.feeder_id,
+            pprint.pformat(self._coordinator.data[self.feeder_id]),
+        )
+
+        if (
+            (feeder := cast(SureFeeder, self._coordinator.data[self.feeder_id]))
+            and len(feeder.bowls) > 0
+            and hasattr(feeder.bowls[self.bowl_id], "weight")
+            and (weight := feeder.bowls[self.bowl_id].weight)
         ):
             return int(weight) if weight and weight > 0 else None
 
@@ -329,7 +368,7 @@ class Battery(SurePetcareSensor):
 
             self._surepy_entity = battery
             self.device_class = SensorDeviceClass.BATTERY
-            self.native_unit_of_measurement=PERCENTAGE
+            self.native_unit_of_measurement = PERCENTAGE
             battery_level = battery.calculate_battery_level(
                 voltage_full=self.voltage_full, voltage_low=self.voltage_low
             )
