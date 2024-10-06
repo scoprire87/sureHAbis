@@ -46,7 +46,7 @@ async def async_setup_entry(
         if surepy_entity.type == EntityType.PET:
             entities.append(Pet(spc.coordinator, surepy_entity.id, spc))
 
-        elif surepy_entity.type == EntityType.HUB:
+        elif surepy_entity.type == EntityType.HUB and surepy_entity.raw_data().get("status", {}).get("led_mode", {}):
             entities.append(Hub(spc.coordinator, surepy_entity.id, spc))
 
         # connectivity
