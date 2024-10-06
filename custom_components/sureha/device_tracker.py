@@ -1,4 +1,5 @@
 """Device tracker for SureHA pets."""
+
 import logging
 from typing import Any
 
@@ -45,8 +46,11 @@ class SureDeviceTracker(CoordinatorEntity, ScannerEntity):
         self._spc: SurePetcareAPI = spc
         self._coordinator = coordinator
 
+        if _id is None:
+            raise ValueError("Pet ID is required")
+
         self._id = _id
-        self._attr_unique_id = f"{self._id}-pet-tracker"
+        self._attr_unique_id = f"{self._id}_pet_tracker"
 
         self._surepy_entity: SurePet = self._coordinator.data[self._id]
         type_name = self._surepy_entity.type.name.replace("_", " ").title()
