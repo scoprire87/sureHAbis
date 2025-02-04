@@ -1,6 +1,6 @@
 """Device tracker for SureHA pets."""
-
 import logging
+from datetime import datetime, timedelta
 from typing import Any
 
 from homeassistant.components.device_tracker.config_entry import ScannerEntity
@@ -28,8 +28,7 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
             SureDeviceTracker(spc.coordinator, pet.id, spc)
             for pet in spc.coordinator.data.values()
             if pet.type == EntityType.PET
-        ],
-        True,
+        ]
     )
 
 
@@ -46,17 +45,12 @@ class SureDeviceTracker(CoordinatorEntity, ScannerEntity):
         self._spc: SurePetcareAPI = spc
         self._coordinator = coordinator
 
-        if _id is None:
-            raise ValueError("Pet ID is required")
-
         self._id = _id
-        self._attr_unique_id = f"{self._id}_pet_tracker"
+        self._attr_unique_id = f"{self._id}-pet-tracker"
 
-        self._surepy_entity: SurePet = self._coordinator.data[self._id]
+        self._surepy_entity: SurePet = self._coordinator.data[_id]
         type_name = self._surepy_entity.type.name.replace("_", " ").title()
         name: str = (
-            # cover edge case where a device has no name set
-            # (dont know how to do this but people have managed to do it  ¯\_(ツ)_/¯)
             self._surepy_entity.name
             if self._surepy_entity.name
             else f"Unnamed {type_name}"
@@ -76,16 +70,23 @@ class SureDeviceTracker(CoordinatorEntity, ScannerEntity):
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return the additional attrs."""
 
-        pet: SurePet
         attrs: dict[str, Any] = {}
 
-        if pet := self._coordinator.data[self._id]:
-
+        if self._surepy_entity:
             attrs = {
-                "since": pet.location.since,
-                "where": pet.location.where,
-                **pet.raw_data(),
+                "since": self._surepy_entity.location.since,
+                "where": self._surepy_entity.location.where,
+                **self._surepy_entity.raw_data(),
             }
+
+            # Calcola la differenza tra il timestamp "since" e l'ora attuale
+            if self._surepy_entity.location.since is not None:
+                since_datetime = datetime.fromisoformat(self._surepy_entity.location.since)
+                now = datetime.now()
+                difference = now - since_datetime
+                hours, remainder = divmod(difference.seconds, 3600)
+                minutes, _ = divmod(remainder, 60)
+                attrs["for"] = f"{hours:02d}:{minutes:02d}"
 
         return attrs
 
@@ -93,11 +94,10 @@ class SureDeviceTracker(CoordinatorEntity, ScannerEntity):
     def location_name(self) -> str:
         """Return 'home' if the pet is at home."""
 
-        pet: SurePet
         inside: bool = False
 
-        if pet := self._coordinator.data[self._id]:
-            inside = bool(pet.location.where == Location.INSIDE)
+        if self._surepy_entity:
+            inside = bool(self._surepy_entity.location.where == Location.INSIDE)
 
         return "home" if inside else "not_home"
 
