@@ -214,11 +214,6 @@ class Flap(SurePetcareSensor):
             if locking := self._surepy_entity.raw_data().get("status",{}).get("locking"):
                 self._attr_state = LockState(locking["mode"]).name.casefold()
 
-    @property
-    def _attr_state(self) -> LockState | None:
-        if state := self._surepy_entity.raw_data().get("status"):
-            return LockState(state["locking"]["mode"])
-
 
 class Felaqua(SurePetcareSensor):
     """Sure Petcare Felaqua."""
@@ -229,11 +224,6 @@ class Felaqua(SurePetcareSensor):
 
         self._attr_entity_picture = self._surepy_entity.icon
         self._attr_unit_of_measurement = UnitOfVolume.MILLILITERS
-
-    @property
-    def _attr_state(self) -> float | None:
-        if felaqua := self._surepy_entity: # No need to cast, already typed
-            return int(felaqua.water_remaining) if felaqua.water_remaining else None
 
 
 class FeederBowl(SurePetcareSensor):
@@ -255,13 +245,6 @@ class FeederBowl(SurePetcareSensor):
         self._surepy_entity: SureFeederBowl = self._coordinator.data[feeder_id].bowls[self.bowl_id]
         # ... (rest of __init__)
 
-    @property
-    def _attr_state(self) -> int | None:  # Use _attr_state
-        if (feeder := cast(SureFeeder, self._coordinator.data[self._feeder_id])) and (
-            weight := feeder.bowls[self.bowl_id].weight
-        ):
-            return int(weight) if weight is not None else 0 # Return 0 instead of None
-
 
 class Feeder(SurePetcareSensor):
     """Sure Petcare Feeder."""
@@ -273,11 +256,6 @@ class Feeder(SurePetcareSensor):
 
         self._attr_entity_picture = self._surepy_entity.icon
         self._attr_unit_of_measurement = UnitOfMass.GRAMS
-
-    @property
-    def _attr_state(self) -> float | None:  # Use _attr_state
-        if feeder := cast(SureFeeder, self._coordinator.data[self._id]):
-            return int(feeder.total_weight) if feeder.total_weight else None
 
 
 class Battery(SurePetcareSensor):
@@ -302,9 +280,6 @@ class Battery(SurePetcareSensor):
         self._battery_level = self._surepy_entity.calculate_battery_level(voltage_full=self.voltage_full, voltage_low=self.voltage_low)
         self._voltage = float(self._surepy_entity.raw_data().get("status",{}).get("battery", 0)) # Default to 0 to avoid errors
 
-    @property
-    def _attr_state(self) -> int | None:  # Use _attr_state
-        return self._battery_level
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
