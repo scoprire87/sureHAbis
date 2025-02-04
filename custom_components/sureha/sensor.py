@@ -26,6 +26,7 @@ from surepy.entities.devices import (
     SurepyDevice,
 )
 from surepy.enums import EntityType, LockState
+from homeassistant.util.dt import now as hass_now
 
 # pylint: disable=relative-beyond-top-level
 from . import SurePetcareAPI
@@ -187,7 +188,7 @@ class SurePetcareSensor(CoordinatorEntity, SensorEntity):
             # Calcola la differenza tra il timestamp "since" e l'ora attuale
             if self._surepy_entity.location.since is not None:
                 since_datetime = datetime.fromisoformat(self._surepy_entity.location.since)
-                now = datetime.now()
+                now = hass_now()  # Usa hass_now() per ottenere un datetime aware
                 difference = now - since_datetime
                 hours, remainder = divmod(difference.seconds, 3600)
                 minutes, _ = divmod(remainder, 60)
