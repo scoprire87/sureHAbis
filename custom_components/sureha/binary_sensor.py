@@ -1,7 +1,8 @@
 """Support for Sure PetCare Flaps/Pets binary sensors."""
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from homeassistant.util.dt import now as hass_now
+from datetime import timedelta
 from typing import Any
 
 from homeassistant.components.binary_sensor import (
@@ -128,118 +129,4 @@ class SurePetcareBinarySensor(CoordinatorEntity, BinarySensorEntity):
                     rf_version := versions.get("rf", {})
                 ):
                     device["sw_version"] = (
-                        f"lcd: {lcd_version.get('version', lcd_version)['firmware']} | "
-                        f"fw: {rf_version.get('version', rf_version)['firmware']}"
-                    )
-
-        except AttributeError:
-            pass
-
-        return device
-
-    @property
-    def extra_state_attributes(self) -> dict[str, Any]:
-        """Return the additional attrs."""
-        attrs = super().extra_state_attributes
-        if attrs is None:
-            attrs = {}
-        if self._surepy_entity.type == EntityType.PET:
-            # Calcola la differenza tra il timestamp "since" e l'ora attuale
-            if self._surepy_entity.location.since is not None:
-                since_datetime = datetime.fromisoformat(self._surepy_entity.location.since)
-                now = datetime.now()
-                difference = now - since_datetime
-                hours, remainder = divmod(difference.seconds, 3600)
-                minutes, _ = divmod(remainder, 60)
-                attrs["for"] = f"{hours:02d}:{minutes:02d}"
-        return attrs
-
-
-class Hub(SurePetcareBinarySensor):
-    """Sure Petcare Hub."""
-
-    def __init__(self, coordinator, _id: int, spc: SurePetcareAPI) -> None:
-        """Initialize a Sure Petcare Hub."""
-        super().__init__(coordinator, _id, spc, BinarySensorDeviceClass.CONNECTIVITY)
-
-        self._surepy_entity: SureHub = self._coordinator.data[_id]
-
-        if self._attr_device_info:
-            self._attr_device_info["identifiers"] = {(DOMAIN, str(self._id))}
-
-        self._attr_available = self.is_on
-
-    @property
-    def is_on(self) -> bool:
-        """Return True if the hub is on."""
-
-        online: bool = False
-
-        if self._surepy_entity:
-            self._attr_extra_state_attributes = {
-                "led_mode": int(self._surepy_entity.raw_data().get("status",{}).get("led_mode", 0)),
-                "pairing_mode": bool(self._surepy_entity.raw_data().get("status",{}).get("pairing_mode", False)),
-            }
-
-            online = self._surepy_entity.online
-
-        return online
-
-
-class Pet(SurePetcareBinarySensor):
-    """Sure Petcare Pet."""
-
-    def __init__(self, coordinator, _id: int, spc: SurePetcareAPI) -> None:
-        """Initialize a Sure Petcare Pet."""
-
-        super().__init__(coordinator, _id, spc, BinarySensorDeviceClass.PRESENCE)
-
-        self._surepy_entity: SurePet = self._coordinator.data[_id]
-
-        self._attr_entity_picture = self._surepy_entity.photo_url
-
-
-    @property
-    def is_on(self) -> bool:
-        """Return True if the pet is at home."""
-
-        inside: bool = False
-
-        if self._surepy_entity:
-            inside = bool(self._surepy_entity.location.where == Location.INSIDE)
-
-        return inside
-
-
-class DeviceConnectivity(SurePetcareBinarySensor):
-    """Sure Petcare Connectivity Sensor."""
-
-    def __init__(self, coordinator, _id: int, spc: SurePetcareAPI) -> None:
-        """Initialize a Sure Petcare device connectivity sensor."""
-
-        super().__init__(coordinator, _id, spc, BinarySensorDeviceClass.CONNECTIVITY)
-
-        self._surepy_entity: SurepyDevice = self._coordinator.data[_id]
-        self._attr_name = f"{self._attr_name} Connectivity"
-        self._attr_unique_id = f"{self._surepy_entity.household_id}-{self._id}-connectivity"
-
-    @property
-    def extra_state_attributes(self) -> dict[str, Any]:
-        """Return the additional attrs."""
-
-        attrs: dict[str, Any] = {}
-
-        if self._surepy_entity and (
-            state:= self._surepy_entity.raw_data().get("status")
-        ):
-            attrs = {
-                "device_rssi": f'{state.get("signal",{}).get("device_rssi", 0):.2f}',
-                "hub_rssi": f'{state.get("signal",{}).get("hub_rssi", 0):.2f}',
-            }
-
-        return attrs
-
-    @property
-    def is_on(self) -> bool:
-        """Return True if the device is connected."""
-        return bool(self.extra_state_attributes)
+                        f"lcd: {
