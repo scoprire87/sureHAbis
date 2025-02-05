@@ -48,13 +48,18 @@ async def async_setup_entry(
         if surepy_entity.type == EntityType.PET:
             entities.append(Pet(spc.coordinator, surepy_entity.id, spc))
 
-        elif surepy_entity.type == EntityType.HUB:
+        elif surepy_entity.type == EntityType.HUB and surepy_entity.raw_data().get("status", {}).get("led_mode", {}):
             entities.append(Hub(spc.coordinator, surepy_entity.id, spc))
 
-        elif surepy_entity.type in [EntityType.PET_FLAP, EntityType.CAT_FLAP, EntityType.FEEDER, EntityType.FELAQUA]:
-            entities.append(DeviceConnectivity(spc.coordinator, surepy_entity.id, spc))
+        elif surepy_entity.type in [
+		    EntityType.PET_FLAP, 
+			EntityType.CAT_FLAP, 
+			EntityType.FEEDER, 
+			EntityType.FELAQUA
+		]:
+			entities.append(DeviceConnectivity(spc.coordinator, surepy_entity.id, spc))
 
-    async_add_entities(entities)
+    async_add_entities(entities, True)
 
 
 class SurePetcareBinarySensor(CoordinatorEntity, BinarySensorEntity):
@@ -67,7 +72,7 @@ class SurePetcareBinarySensor(CoordinatorEntity, BinarySensorEntity):
         coordinator,
         _id: int,
         spc: SurePetcareAPI,
-        device_class: BinarySensorDeviceClass | None,
+        device_class: str,
     ):
         """Initialize a Sure Petcare binary sensor."""
         super().__init__(coordinator)
@@ -77,7 +82,7 @@ class SurePetcareBinarySensor(CoordinatorEntity, BinarySensorEntity):
 
         self._coordinator = coordinator
 
-        self._surepy_entity: SurepyEntity = self._coordinator.data[_id]
+        self._surepy_entity: SurepyEntity = self._coordinator.data[self._id]
         self._state: Any = self._surepy_entity.raw_data().get("status", {})
 
         type_name = self._surepy_entity.type.name.replace("_", " ").title()
@@ -90,8 +95,8 @@ class SurePetcareBinarySensor(CoordinatorEntity, BinarySensorEntity):
 
         self._attr_available = bool(self._state)
 
-        self._attr_device_class = device_class
-        self._attr_name: str = f"{type_name} {self._attr_name}"
+        self._attr_device_class = None if not device_class else device_class
+        self._attr_name: str = f"{type_name} {self._name}"
         self._attr_unique_id = f"{self._surepy_entity.household_id}-{self._id}"
 
         if self._state:
@@ -138,26 +143,11 @@ class SurePetcareBinarySensor(CoordinatorEntity, BinarySensorEntity):
 
         return device
 
-    @property
-    def extra_state_attributes(self) -> dict[str, Any]:
-        """Return the additional attrs."""
-        attrs = super().extra_state_attributes
-        if attrs is None:
-            attrs = {}
-        if self._surepy_entity.type == EntityType.PET:
-            # Calcola la differenza tra il timestamp "since" e l'ora attuale
-            if self._surepy_entity.location.since is not None:
-                since_datetime = datetime.fromisoformat(self._surepy_entity.location.since)
-                now = hass_now()  # Usa hass_now() per ottenere un datetime aware
-                difference = now - since_datetime
-                hours, remainder = divmod(difference.seconds, 3600)
-                minutes, _ = divmod(remainder, 60)
-                attrs["for"] = f"{hours:02d}:{minutes:02d}"
-        return attrs
+ 
 
 
 class Hub(SurePetcareBinarySensor):
-    """Sure Petcare Hub."""
+    """Sure Petcare Pet."""
 
     def __init__(self, coordinator, _id: int, spc: SurePetcareAPI) -> None:
         """Initialize a Sure Petcare Hub."""
@@ -174,15 +164,16 @@ class Hub(SurePetcareBinarySensor):
     def is_on(self) -> bool:
         """Return True if the hub is on."""
 
+		hub: SureHub			
         online: bool = False
 
-        if self._surepy_entity:
+        if hub := self._coordinator.data[self._id]:
             self._attr_extra_state_attributes = {
-                "led_mode": int(self._surepy_entity.raw_data().get("status", {}).get("led_mode", 0)),
-                "pairing_mode": bool(self._surepy_entity.raw_data().get("status", {}).get("pairing_mode", False)),
+                "led_mode": int(hub.raw_data()["status"]["led_mode"]),
+                "pairing_mode": bool(hub.raw_data()["status"]["pairing_mode"]),
             }
 
-            online = self._surepy_entity.online
+            online = hub.online
 
         return online
 
@@ -195,18 +186,48 @@ class Pet(SurePetcareBinarySensor):
 
         super().__init__(coordinator, _id, spc, BinarySensorDeviceClass.PRESENCE)
 
-        self._surepy_entity: SurePet = self._coordinator.data[_id]
+        self._surepy_entity: SurePet
 
         self._attr_entity_picture = self._surepy_entity.photo_url
 
     @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return the additional attrs."""
+		
+		pet: SurePet
+		attrs: dict[str, Any] = {}
+
+        if pet := self._coordinator.data[self._id]:
+
+            attrs = {
+                "since": pet.location.since,
+                "where": pet.location.where,
+                **pet.raw_data(),
+            }
+
+        return attrs
+        attrs = super().extra_state_attributes
+        if attrs is None:
+            attrs = {}
+        if self._surepy_entity.type == EntityType.PET:
+            # Calcola la differenza tra il timestamp "since" e l'ora attuale
+            if self._surepy_entity.location.since is not None:
+                since_datetime = datetime.fromisoformat(self._surepy_entity.location.since)
+                now = hass_now()  # Usa hass_now() per ottenere un datetime aware
+                difference = now - since_datetime
+                hours, remainder = divmod(difference.seconds, 3600)
+                minutes, _ = divmod(remainder, 60)
+                attrs["for"] = f"{hours:02d}:{minutes:02d}"
+        return attrs													   
+    @property		 
     def is_on(self) -> bool:
         """Return True if the pet is at home."""
 
+		pet: SurePet			
         inside: bool = False
 
-        if self._surepy_entity:
-            inside = bool(self._surepy_entity.location.where == Location.INSIDE)
+        if pet := self._coordinator.data[self_id]:
+            inside = bool(pet.location.where == Location.INSIDE)
 
         return inside
 
@@ -219,27 +240,29 @@ class DeviceConnectivity(SurePetcareBinarySensor):
 
         super().__init__(coordinator, _id, spc, BinarySensorDeviceClass.CONNECTIVITY)
 
-        self._surepy_entity: SurepyDevice = self._coordinator.data[_id]
         self._attr_name = f"{self._attr_name} Connectivity"
-        self._attr_unique_id = f"{self._surepy_entity.household_id}-{self._id}-connectivity"
+		self._attr_unique_id = (						
+            f"{self._surepy_entity.household_id}-{self._id}-connectivity"
+		)
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return the additional attrs."""
 
+		device: SurepyDevice					
         attrs: dict[str, Any] = {}
 
-        if self._surepy_entity and (
-            state := self._surepy_entity.raw_data().get("status")
+        if (device := self._coordinator.data[self._id]) and (
+            state := device.raw_data().get("status")
         ):
             attrs = {
-                "device_rssi": f'{state.get("signal", {}).get("device_rssi", 0):.2f}',
-                "hub_rssi": f'{state.get("signal", {}).get("hub_rssi", 0):.2f}',
+                "device_rssi": f'{state["signal"]["device_rssi"]:.2f}',
+                "hub_rssi": f'{state["signal"]["hub_rssi"]:.2f}',
             }
 
         return attrs
 
     @property
     def is_on(self) -> bool:
-        """Return True if the device is connected."""
+        """Return True if the pet is at home."""
         return bool(self.extra_state_attributes)

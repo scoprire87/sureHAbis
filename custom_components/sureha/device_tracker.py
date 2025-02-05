@@ -28,7 +28,7 @@ async def async_setup_entry(hass, config_entry, async_add_entities):
             SureDeviceTracker(spc.coordinator, pet.id, spc)
             for pet in spc.coordinator.data.values()
             if pet.type == EntityType.PET
-        ]
+        ],
     )
 
 
@@ -45,10 +45,12 @@ class SureDeviceTracker(CoordinatorEntity, ScannerEntity):
         self._spc: SurePetcareAPI = spc
         self._coordinator = coordinator
 
+        if _id is None:
+            raise ValueError("Pet ID is required")											  
         self._id = _id
-        self._attr_unique_id = f"{self._id}-pet-tracker"
+        self._attr_unique_id = f"{self._id}_pet_tracker"
 
-        self._surepy_entity: SurePet = self._coordinator.data[_id]
+        self._surepy_entity: SurePet = self._coordinator.data[self._id]
         type_name = self._surepy_entity.type.name.replace("_", " ").title()
         name: str = (
             self._surepy_entity.name
@@ -72,11 +74,11 @@ class SureDeviceTracker(CoordinatorEntity, ScannerEntity):
 
         attrs: dict[str, Any] = {}
 
-        if self._surepy_entity:
+        if pet := self._coordinator.data[self._id]:
             attrs = {
-                "since": self._surepy_entity.location.since,
-                "where": self._surepy_entity.location.where,
-                **self._surepy_entity.raw_data(),
+                "since": pet.location.since,
+                "where": pet.location.where,
+                **pet.raw_data(),
             }
 
             # Calcola la differenza tra il timestamp "since" e l'ora attuale
@@ -94,10 +96,11 @@ class SureDeviceTracker(CoordinatorEntity, ScannerEntity):
     def location_name(self) -> str:
         """Return 'home' if the pet is at home."""
 
+		pet: SurePet			
         inside: bool = False
 
-        if self._surepy_entity:
-            inside = bool(self._surepy_entity.location.where == Location.INSIDE)
+        if pet := self._coordinator.data[self._id]:
+            inside = bool(pet.location.where == Location.INSIDE)
 
         return "home" if inside else "not_home"
 
