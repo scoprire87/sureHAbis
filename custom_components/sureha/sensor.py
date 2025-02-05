@@ -6,7 +6,7 @@ import logging
 import pprint
 import random
 from typing import Any, cast
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 from homeassistant.components.sensor import (
     SensorEntity,
@@ -402,9 +402,15 @@ class Battery(SurePetcareSensor):
                 now_dt = datetime.now(timezone.utc)
                 duration = now_dt - since_dt
 
-                hours, remainder = divmod(int(duration.total_seconds()), 3600)
+                days, remainder = divmod(int(duration.total_seconds()), 86400)  # Calculate days
+                hours, remainder = divmod(remainder, 3600)
                 minutes, _ = divmod(remainder, 60)
-                formatted_duration = f"{hours:02}:{minutes:02}"
+
+                if days > 0:
+                    formatted_duration = f"{days}d {hours:02}:{minutes:02}"  # Format with days
+                else:
+                    formatted_duration = f"{hours:02}:{minutes:02}"
+
                 attrs["for"] = formatted_duration
 
         return attrs
