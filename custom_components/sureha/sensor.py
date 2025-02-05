@@ -1,8 +1,12 @@
 """Support for Sure PetCare Flaps/Pets sensors."""
+
 from __future__ import annotations
 
 import logging
+import pprint
+import random
 from typing import Any, cast
+from datetime import datetime, timezone
 
 from homeassistant.components.sensor import (
     SensorEntity,
@@ -26,7 +30,6 @@ from surepy.entities.devices import (
     SurepyDevice,
 )
 from surepy.enums import EntityType, LockState
-from homeassistant.util.dt import now as hass_now
 
 # pylint: disable=relative-beyond-top-level
 from . import SurePetcareAPI
@@ -77,7 +80,7 @@ async def async_setup_entry(
 
         elif surepy_entity.type == EntityType.FEEDER:
 
-             bowls = {}
+            bowls = {}
 
             if len(surepy_entity.bowls) > 0:
                 bowls = surepy_entity.bowls.values()
@@ -92,9 +95,10 @@ async def async_setup_entry(
                 pprint.pformat(bowls),
             )
 
-            for bowl in bowls.get("settings", []):										  
+            for bowl in bowls.get("settings", []):
                 entities.append(
                     FeederBowl(spc.coordinator, surepy_entity.id, spc, bowl)
+                    # FeederBowl(spc.coordinator, surepy_entity.id, spc, bowl.raw_data())
                 )
 
             entities.append(Feeder(spc.coordinator, surepy_entity.id, spc))
@@ -143,7 +147,8 @@ class SurePetcareSensor(CoordinatorEntity, SensorEntity):
 
         self._surepy_entity: SurepyEntity = self._coordinator.data[_id]
         self._state: dict[str, Any] = self._surepy_entity.raw_data()["status"]
-		self._attr_available = bool(self._state)										
+
+        self._attr_available = bool(self._state)
         self._attr_unique_id = f"{self._surepy_entity.household_id}-{self._id}"
 
         self._attr_extra_state_attributes = (
@@ -157,9 +162,11 @@ class SurePetcareSensor(CoordinatorEntity, SensorEntity):
 
     @property
     def device_info(self):
+
         device = {}
 
         try:
+
             model = f"{self._surepy_entity.type.name.replace('_', ' ').title()}"
             if serial := self._surepy_entity.raw_data().get("serial_number"):
                 model = f"{model} ({serial})"
@@ -194,29 +201,13 @@ class SurePetcareSensor(CoordinatorEntity, SensorEntity):
 
         return device
 
-    @property
-    def extra_state_attributes(self) -> dict[str, Any]:
-        """Return the additional attrs."""
-        attrs = super().extra_state_attributes
-        if attrs is None:
-            attrs = {}
-        if self._surepy_entity.type == EntityType.PET:
-            # Calcola la differenza tra il timestamp "since" e l'ora attuale
-            if self._surepy_entity.location.since is not None:
-                since_datetime = datetime.fromisoformat(self._surepy_entity.location.since)
-                now = hass_now()  # Usa hass_now() per ottenere un datetime aware
-                difference = now - since_datetime
-                hours, remainder = divmod(difference.seconds, 3600)
-                minutes, _ = divmod(remainder, 60)
-                attrs["for"] = f"{hours:02d}:{minutes:02d}"
-        return attrs
-
 
 class Flap(SurePetcareSensor):
     """Sure Petcare Flap."""
 
     def __init__(self, coordinator, _id: int, spc: SurePetcareAPI) -> None:
         super().__init__(coordinator, _id, spc)
+
         self._surepy_entity: SureFlap
 
         self._attr_entity_picture = self._surepy_entity.icon
@@ -241,14 +232,15 @@ class Flap(SurePetcareSensor):
         ):
             return LockState(state["locking"]["mode"]).name.casefold()
 
+
 class Felaqua(SurePetcareSensor):
     """Sure Petcare Felaqua."""
 
     def __init__(self, coordinator, _id: int, spc: SurePetcareAPI):
         super().__init__(coordinator, _id, spc)
 
-		
-		self._surepy_entity: SureFelaqua
+        self._surepy_entity: SureFelaqua
+
         self._attr_entity_picture = self._surepy_entity.icon
         self._attr_unit_of_measurement = UnitOfVolume.MILLILITERS
 
@@ -258,24 +250,19 @@ class Felaqua(SurePetcareSensor):
         if felaqua := cast(SureFelaqua, self._coordinator.data[self._id]):
             return int(felaqua.water_remaining) if felaqua.water_remaining else None
 
+
 class FeederBowl(SurePetcareSensor):
     """Sure Petcare Feeder Bowl."""
 
     def __init__(
         self,
         coordinator,
-        _id: int,  # Renamed for clarity
+        _id: int,
         spc: SurePetcareAPI,
         bowl_data: dict[str, int | str],
     ):
         """Initialize a Bowl sensor."""
-        super().__init__(coordinator, _id, spc)  # Use feeder_id here
-        self._id = feeder_id  # Renamed
-        self.bowl_id = int(bowl_data["index"])
-        self._bowl_entity_id = int(f"{_id}{str(self.bowl_id)}")  # Renamed
-        self._surepy_feeder_entity: SurepyEntity = self._coordinator.data[_id]
-        self._surepy_entity: SureFeederBowl = self._coordinator.data[_id].bowls[self.bowl_id]
-        # ... (rest of __init__)
+        super().__init__(coordinator, _id, spc)
 
         _LOGGER.debug("bowl_data: %s", pprint.pformat(bowl_data))
 
@@ -347,6 +334,7 @@ class Feeder(SurePetcareSensor):
         if feeder := cast(SureFeeder, self._coordinator.data[self._id]):
             return int(feeder.total_weight) if feeder.total_weight else None
 
+
 class Battery(SurePetcareSensor):
     """Sure Petcare Flap."""
 
@@ -359,17 +347,19 @@ class Battery(SurePetcareSensor):
         voltage_low: float,
     ):
         super().__init__(coordinator, _id, spc)
+
         self._surepy_entity: SurepyDevice
+
         self._attr_name = f"{self._attr_name} Battery Level"
+
         self.voltage_low = voltage_low
         self.voltage_full = voltage_full
+
         self._attr_unit_of_measurement = PERCENTAGE
         self._attr_device_class = SensorDeviceClass.BATTERY
-		self._attr_unique_id = (
-		    f"{self._surepy_entity.household_id}-{self._surepy_entity.id}-battery"
-		)
-        self._battery_level = self._surepy_entity.calculate_battery_level(voltage_full=self.voltage_full, voltage_low=self.voltage_low)
-        self._voltage = float(self._surepy_entity.raw_data().get("status",{}).get("battery", 0)) # Default to 0 to avoid errors
+        self._attr_unique_id = (
+            f"{self._surepy_entity.household_id}-{self._surepy_entity.id}-battery"
+        )
 
     @property
     def state(self) -> int | None:
@@ -393,8 +383,8 @@ class Battery(SurePetcareSensor):
 
         attrs = {}
 
-        if (device := cast(SurepyDevice, self._coordinator.data[self._id])) and (
-            state := device.raw_data().get("status")
+        if (device:= cast(SurepyDevice, self._coordinator.data[self._id])) and (
+            state:= device.raw_data().get("status")
         ):
             self._surepy_entity = device
 
@@ -404,6 +394,17 @@ class Battery(SurePetcareSensor):
                 "battery_level": device.battery_level,
                 ATTR_VOLTAGE: f"{voltage:.2f}",
                 f"{ATTR_VOLTAGE}_per_battery": f"{voltage / 4:.2f}",
+                **self._surepy_entity.raw_data() # include all data
             }
+
+            if hasattr(device, "location") and hasattr(device.location, "since"):
+                since_dt = datetime.fromisoformat(device.location.since.replace("Z", "+00:00"))
+                now_dt = datetime.now(timezone.utc)
+                duration = now_dt - since_dt
+
+                hours, remainder = divmod(int(duration.total_seconds()), 3600)
+                minutes, _ = divmod(remainder, 60)
+                formatted_duration = f"{hours:02}:{minutes:02}"
+                attrs["for"] = formatted_duration
 
         return attrs
